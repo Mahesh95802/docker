@@ -1,0 +1,137 @@
+version: '3.7'
+name: e2e
+services:
+  auth-db:
+    image: postgres:latest
+    ports:
+      - 5433:5432
+    volumes:
+      - ../auth-service/database/data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: e2e_auth
+      POSTGRES_PASSWORD: password
+  backend-db:
+    image: postgres:latest
+    ports:
+      - 5434:5432
+    volumes:
+      - ../backend/database/data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: e2e_backend
+      POSTGRES_PASSWORD: password
+  auth-redis:
+    image: redis:latest
+    restart: always
+    ports:
+      - 6380:6379
+  auth-server:
+    build: 
+      context: ../auth-service/
+      dockerfile: Dockerfile
+    depends_on:
+      - auth-db
+      - auth-redis
+    ports:
+      - 4001:4001
+    # volumes:
+    #   - ../auth-service/:/app/
+    environment:
+      - PORT=4001
+      - JWT_SECRET=ThisIsTheJWTSecret
+      - JWT_EXPIRY=86400000
+      - DB_DEV_USER=postgres
+      - DB_DEV_HOST=auth-db
+      - DB_DEV_NAME=e2e_auth
+      - DB_DEV_PASS=password
+      - DB_DEV_PORT=5432
+      - DB_TEST_USER=postgres
+      - DB_TEST_NAME=e2e_auth
+      - DB_TEST_HOST=auth-db
+      - DB_TEST_PASS=password
+      - DB_TEST_PORT=5432
+      - REDIS_HOST=auth-redis
+      - REDIS_PORT=6379
+  auth-migration:
+    build: 
+      context: ../auth-service/
+      dockerfile: Dockerfile.migration
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    environment:
+      - DB_DEV_USER=postgres
+      - DB_DEV_HOST=auth-db
+      - DB_DEV_NAME=e2e_auth
+      - DB_DEV_PASS=password
+      - DB_DEV_PORT=5432
+      - DB_TEST_USER=postgres
+      - DB_TEST_NAME=e2e_auth
+      - DB_TEST_HOST=auth-db
+      - DB_TEST_PASS=password
+      - DB_TEST_PORT=5432
+  backend-server:
+    build: 
+      context: ../backend/
+      dockerfile: Dockerfile
+    depends_on:
+      - backend-db
+    ports:
+      - 4000:4000
+    volumes:
+      - ../backend/:/app/
+    environment:
+      - PORT=4000
+      - DB_DEV_USER=postgres
+      - DB_DEV_HOST=backend-db
+      - DB_DEV_NAME=e2e_backend
+      - DB_DEV_PASS=password
+      - DB_DEV_PORT=5432
+      - DB_TEST_USER=postgres
+      - DB_TEST_NAME=e2e_backend
+      - DB_TEST_HOST=backend-db
+      - DB_TEST_PASS=password
+      - DB_TEST_PORT=5432
+      - 'AUTH_SERVICE_HOST=http://auth-server:4001'
+  backend-migration:
+    build: 
+      context: ../backend/
+      dockerfile: Dockerfile.migration
+    depends_on:
+      backend-db:
+        condition: service_healthy
+    environment:
+      - DB_DEV_USER=postgres
+      - DB_DEV_HOST=backend-db
+      - DB_DEV_NAME=e2e_backend
+      - DB_DEV_PASS=password
+      - DB_DEV_PORT=5432
+      - DB_TEST_USER=postgres
+      - DB_TEST_NAME=e2e_backend
+      - DB_TEST_HOST=backend-db
+      - DB_TEST_PASS=password
+      - DB_TEST_PORT=5432
+  frontend-server:
+    build: 
+      context: ../frontend/
+      dockerfile: Dockerfile
+    ports:
+      - 3000:3000
+    volumes:
+      - ../frontend/:/app/
+    # environment:
+    #   - PORT=3000
+    #   - 'AUTH_SERVICE_HOST=http://auth-server:4001'
+    #   - 'BACKEND_SERVICE_HOST=http://backend-server:4000'
+
